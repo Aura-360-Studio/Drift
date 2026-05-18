@@ -15,63 +15,83 @@ export const useCompass = (smoothing = 0.1) => {
     isSupported: true,
     error: null,
   });
+  const [hasPermission, setHasPermission] = useState<boolean | null>(null);
 
   const headingRef = useRef(0);
 
+  const requestAccess = async () => {
+    try {
+      if (typeof (DeviceOrientationEvent as any).requestPermission === 'function') {
+        const permissionState = await (DeviceOrientationEvent as any).requestPermission();
+        if (permissionState === 'granted') {
+          setHasPermission(true);
+        } else {
+          setData(prev => ({ ...prev, error: 'Permission denied' }));
+          setHasPermission(false);
+          return false;
+        }
+      } else {
+        setHasPermission(true);
+      }
+      return true;
+    } catch (error) {
+      setData(prev => ({ ...prev, error: 'Permission error' }));
+      setHasPermission(false);
+      return false;
+    }
+  };
+
   useEffect(() => {
-    // Check for DeviceOrientationEvent support
-    if (!(window as any).DeviceOrientationEvent) {
+    if (hasPermission === false) return;
+    if (hasPermission === null && typeof (DeviceOrientationEvent as any).requestPermission === 'function') {
+      // Need user gesture first
+      return;
+    }
+
+    if (!window.DeviceOrientationEvent) {
       setData(prev => ({ ...prev, isSupported: false, error: 'Sensors not supported' }));
       return;
     }
 
-    const handleOrientation = (event: DeviceOrientationEvent) => {
+    const handleOrientation = (event: DeviceOrientationEvent | any) => {
       let rawHeading = 0;
 
-      // WebkitCompassHeading is specific to iOS but we need a robust way for both
-      if ((event as any).webkitCompassHeading !== undefined) {
-        rawHeading = (event as any).webkitCompassHeading;
+      if (event.webkitCompassHeading !== undefined) {
+        rawHeading = event.webkitCompassHeading;
+      } else if (event.absolute && event.alpha !== null) {
+        rawHeading = 360 - event.alpha;
       } else if (event.alpha !== null) {
-        // alpha is rotation around z-axis (compass heading)
-        // Note: alpha is 0 when the top of the device is pointing to the North pole.
-        // On Android, alpha is usually in [0, 360]
         rawHeading = 360 - event.alpha;
       } else {
-        setData(prev => ({ ...prev, error: 'No heading data' }));
         return;
       }
 
-      // Smooth the heading
       const smoothed = lowPass(headingRef.current, rawHeading, smoothing);
       headingRef.current = normalizeAngle(smoothed);
 
       setData({
         heading: headingRef.current,
-        accuracy: (event as any).webkitCompassAccuracy || 0,
+        accuracy: event.webkitCompassAccuracy || 0,
         isSupported: true,
         error: null,
       });
     };
 
-    window.addEventListener('deviceorientation', handleOrientation);
-    
-    // For iOS 13+ we need to request permission
-    if (typeof (DeviceOrientationEvent as any).requestPermission === 'function') {
-      (DeviceOrientationEvent as any).requestPermission()
-        .then((permissionState: string) => {
-          if (permissionState !== 'granted') {
-            setData(prev => ({ ...prev, error: 'Permission denied' }));
-          }
-        })
-        .catch(() => {
-          setData(prev => ({ ...prev, error: 'Permission error' }));
-        });
+    // Chrome Android uses deviceorientationabsolute for absolute compass
+    if ('ondeviceorientationabsolute' in window) {
+      window.addEventListener('deviceorientationabsolute', handleOrientation);
+    } else {
+      window.addEventListener('deviceorientation', handleOrientation);
     }
 
     return () => {
-      window.removeEventListener('deviceorientation', handleOrientation);
+      if ('ondeviceorientationabsolute' in window) {
+        window.removeEventListener('deviceorientationabsolute', handleOrientation);
+      } else {
+        window.removeEventListener('deviceorientation', handleOrientation);
+      }
     };
-  }, [smoothing]);
+  }, [smoothing, hasPermission]);
 
-  return data;
+  return { ...data, requestAccess, hasPermission };
 };

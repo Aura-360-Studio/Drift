@@ -8,7 +8,7 @@ import { MapPin, Navigation, Settings, ShieldCheck, WifiOff, Activity, X, Bike, 
 import QRCode from 'react-qr-code';
 
 function App() {
-  const { heading, isSupported } = useCompass(0.15);
+  const { heading, isSupported, error: sensorError, hasPermission, requestAccess } = useCompass(0.15);
   const location = useGeolocation();
   const mag = useMagnetometer();
   const [isOffline, setIsOffline] = useState(!navigator.onLine);
@@ -16,6 +16,8 @@ function App() {
   const [showLab, setShowLab] = useState(false);
   const [lockedHeading, setLockedHeading] = useState<number | null>(null);
   const [isMobile, setIsMobile] = useState(true);
+  const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
+  const [showPwaPrompt, setShowPwaPrompt] = useState(false);
 
   useEffect(() => {
     const checkMobile = () => {
@@ -37,14 +39,37 @@ function App() {
     window.addEventListener('online', handleOnline);
     window.addEventListener('offline', handleOffline);
     
-    const timer = setTimeout(() => setShowSplash(false), 2000);
+    // PWA Install Prompt
+    const handleBeforeInstallPrompt = (e: any) => {
+      e.preventDefault();
+      setDeferredPrompt(e);
+      // Optional: Check if already installed or running standalone
+      if (!window.matchMedia('(display-mode: standalone)').matches) {
+        setShowPwaPrompt(true);
+      }
+    };
+    window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+
+    const timer = setTimeout(() => setShowSplash(false), 2500);
     
     return () => {
       window.removeEventListener('online', handleOnline);
       window.removeEventListener('offline', handleOffline);
+      window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
       clearTimeout(timer);
     };
   }, []);
+
+  const handleInstallClick = async () => {
+    if (deferredPrompt) {
+      deferredPrompt.prompt();
+      const { outcome } = await deferredPrompt.userChoice;
+      if (outcome === 'accepted') {
+        setDeferredPrompt(null);
+        setShowPwaPrompt(false);
+      }
+    }
+  };
 
   const getCardinal = (angle: number) => {
     const directions = ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW'];
@@ -252,52 +277,101 @@ function App() {
       </header>
 
       {/* Main Content */}
-      <main className="min-h-screen flex flex-col items-center justify-center pt-16 pb-32 px-6">
+      <main className="min-h-screen flex flex-col items-center justify-center pt-24 pb-36 px-6">
+        
+        {/* Sensor Permission Overlay */}
+        <AnimatePresence>
+          {(hasPermission === null || hasPermission === false) && (
+            <motion.div 
+              initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+              className="absolute inset-0 z-40 bg-black/80 backdrop-blur-xl flex items-center justify-center p-8"
+            >
+              <div className="glass-panel p-10 max-w-sm w-full text-center space-y-8 relative overflow-hidden">
+                <div className="absolute top-0 inset-x-0 h-1 bg-gradient-to-r from-brand-accent via-white to-brand-accent opacity-50" />
+                <CompassIcon className="w-16 h-16 mx-auto text-brand-accent opacity-80" />
+                <div className="space-y-2">
+                  <h2 className="text-2xl font-bold">Sensor Calibration</h2>
+                  <p className="text-white/60 text-sm">Drift requires access to your device's orientation sensors to provide a high-fidelity compass experience.</p>
+                </div>
+                <button 
+                  onClick={requestAccess}
+                  className="w-full py-4 rounded-2xl bg-white text-black font-bold shadow-[0_0_20px_rgba(255,255,255,0.3)] hover:scale-[1.02] active:scale-95 transition-all"
+                >
+                  Enable Sensors
+                </button>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        {/* PWA Install Modal */}
+        <AnimatePresence>
+          {showPwaPrompt && (
+            <motion.div 
+              initial={{ y: 50, opacity: 0 }} animate={{ y: 0, opacity: 1 }} exit={{ y: 50, opacity: 0 }}
+              className="fixed bottom-32 left-6 right-6 z-50 glass-panel p-6 shadow-2xl border border-brand-accent/20 flex flex-col gap-4 items-center text-center"
+            >
+              <div className="w-12 h-12 rounded-full bg-brand-accent/20 flex items-center justify-center mb-2">
+                <Smartphone className="w-6 h-6 text-brand-accent" />
+              </div>
+              <div>
+                <h3 className="font-bold text-lg">Install Drift</h3>
+                <p className="text-xs text-white/60 mt-1">Add to your home screen for the full 2026 native experience and offline access.</p>
+              </div>
+              <div className="flex w-full gap-3 mt-2">
+                <button 
+                  onClick={() => setShowPwaPrompt(false)}
+                  className="flex-1 py-3 rounded-xl bg-white/5 border border-white/10 text-white/70 text-sm font-medium"
+                >
+                  Dismiss
+                </button>
+                <button 
+                  onClick={handleInstallClick}
+                  className="flex-1 py-3 rounded-xl bg-brand-accent text-black text-sm font-bold shadow-[0_0_15px_rgba(0,240,255,0.4)]"
+                >
+                  Install Now
+                </button>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
         {/* Info Pill */}
-        <div className="mb-8 px-4 py-2 bg-white/5 border border-white/10 rounded-full flex gap-4 text-[10px] font-mono tracking-widest text-white/50">
-          <span>LAT: {location.lat ? location.lat.toFixed(4) : '---'}</span>
-          <span>LON: {location.lng ? location.lng.toFixed(4) : '---'}</span>
+        <div className="mb-6 px-5 py-2.5 bg-white/5 border border-white/10 rounded-full flex gap-6 text-xs font-mono font-medium tracking-wider text-white/70 shadow-lg backdrop-blur-md">
+          <span>LAT: <span className="text-white">{location.lat ? location.lat.toFixed(4) : '---'}</span></span>
+          <span>LON: <span className="text-white">{location.lng ? location.lng.toFixed(4) : '---'}</span></span>
         </div>
 
         {/* Compass Display */}
-        <div className="flex flex-col items-center gap-12">
-          <div className="text-center space-y-2 relative">
-            {/* HUD Bracket */}
-            <div className="absolute -inset-8 border border-brand-accent/20 rounded-2xl pointer-events-none">
-              <div className="absolute top-0 left-0 w-4 h-4 border-t-2 border-l-2 border-brand-accent rounded-tl-xl" />
-              <div className="absolute top-0 right-0 w-4 h-4 border-t-2 border-r-2 border-brand-accent rounded-tr-xl" />
-              <div className="absolute bottom-0 left-0 w-4 h-4 border-b-2 border-l-2 border-brand-accent rounded-bl-xl" />
-              <div className="absolute bottom-0 right-0 w-4 h-4 border-b-2 border-r-2 border-brand-accent rounded-br-xl" />
-            </div>
+        <div className="flex flex-col items-center gap-10 w-full relative">
+          
+          <CompassDial heading={heading} lockedHeading={lockedHeading} />
 
+          {/* Floating Modern Readout over the Dial */}
+          <div className="absolute top-1/2 -translate-y-1/2 flex flex-col items-center justify-center pointer-events-none z-10">
             <motion.div 
-              className="text-[6rem] leading-none font-black tracking-tighter flex items-center justify-center font-mono text-white drop-shadow-[0_0_15px_rgba(0,240,255,0.3)] relative py-2 px-4"
+              className="text-6xl font-bold tracking-tight flex items-start justify-center text-white drop-shadow-[0_4px_20px_rgba(0,0,0,0.8)]"
               initial={{ opacity: 0, scale: 0.9 }}
               animate={{ opacity: 1, scale: 1 }}
             >
-              <span className="z-10">{Math.round(heading).toString().padStart(3, '0')}</span>
-              <div className="absolute left-full top-6 flex items-baseline pl-2">
-                <span className="text-3xl font-normal text-brand-accent/50">°</span>
-                <span className="text-3xl ml-2 font-bold text-brand-secondary tracking-widest w-8 text-left">{getCardinal(heading)}</span>
-              </div>
+              <span>{Math.round(heading).toString().padStart(3, '0')}</span>
+              <span className="text-2xl mt-2 text-brand-accent ml-1">°</span>
             </motion.div>
           </div>
-
-          <CompassDial heading={heading} lockedHeading={lockedHeading} />
 
           {/* Direction Lock Button */}
           <button 
             onClick={() => setLockedHeading(lockedHeading === null ? heading : null)}
             className={`
-              flex items-center gap-2 px-6 py-3 rounded-full border transition-all duration-500
+              mt-8 flex items-center gap-2 px-8 py-4 rounded-2xl border backdrop-blur-lg transition-all duration-300 shadow-xl
               ${lockedHeading !== null 
-                ? 'bg-brand-accent border-brand-accent text-white shadow-[0_0_20px_rgba(255,59,48,0.3)]' 
-                : 'bg-white/5 border-white/10 text-white/60 hover:bg-white/10'}
+                ? 'bg-brand-secondary/20 border-brand-secondary text-white shadow-[0_0_30px_rgba(255,0,60,0.3)] scale-105' 
+                : 'bg-white/5 border-white/10 text-white/80 hover:bg-white/10'}
             `}
           >
-            <Navigation className={`w-4 h-4 ${lockedHeading !== null ? 'fill-current' : ''}`} />
-            <span className="text-xs font-bold uppercase tracking-widest">
-              {lockedHeading !== null ? 'Direction Locked' : 'Lock Heading'}
+            <Navigation className={`w-5 h-5 ${lockedHeading !== null ? 'fill-brand-secondary text-brand-secondary' : ''}`} />
+            <span className="text-sm font-semibold tracking-wide">
+              {lockedHeading !== null ? 'TARGET LOCKED' : 'LOCK HEADING'}
             </span>
           </button>
         </div>
