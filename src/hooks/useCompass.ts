@@ -41,6 +41,10 @@ export const useCompass = (smoothing = 0.1) => {
     }
   };
 
+  const stopAccess = () => {
+    setHasPermission(false);
+  };
+
   useEffect(() => {
     if (hasPermission === false) return;
     if (hasPermission === null && typeof (DeviceOrientationEvent as any).requestPermission === 'function') {
@@ -54,17 +58,18 @@ export const useCompass = (smoothing = 0.1) => {
     }
 
     const handleOrientation = (event: DeviceOrientationEvent | any) => {
-      let rawHeading = 0;
+      let rawHeading = null;
 
-      if (event.webkitCompassHeading !== undefined) {
+      if (event.webkitCompassHeading !== undefined && event.webkitCompassHeading !== null) {
         rawHeading = event.webkitCompassHeading;
-      } else if (event.absolute && event.alpha !== null) {
+      } else if (event.absolute === true && event.alpha !== null) {
         rawHeading = 360 - event.alpha;
       } else if (event.alpha !== null) {
+        // Fallback to relative alpha if absolute is missing
         rawHeading = 360 - event.alpha;
-      } else {
-        return;
       }
+
+      if (rawHeading === null) return;
 
       const smoothed = lowPass(headingRef.current, rawHeading, smoothing);
       headingRef.current = normalizeAngle(smoothed);
@@ -79,20 +84,21 @@ export const useCompass = (smoothing = 0.1) => {
 
     // Chrome Android uses deviceorientationabsolute for absolute compass
     const hasAbsolute = typeof (window as any).ondeviceorientationabsolute !== 'undefined';
+    
+    // Some devices have 'ondeviceorientationabsolute' but it never fires or is empty. 
+    // We attach to BOTH, but 'deviceorientation' will just update the heading if 'absolute' isn't available.
     if (hasAbsolute) {
       (window as any).addEventListener('deviceorientationabsolute', handleOrientation);
-    } else {
-      window.addEventListener('deviceorientation', handleOrientation);
     }
+    window.addEventListener('deviceorientation', handleOrientation);
 
     return () => {
       if (hasAbsolute) {
         (window as any).removeEventListener('deviceorientationabsolute', handleOrientation);
-      } else {
-        window.removeEventListener('deviceorientation', handleOrientation);
       }
+      window.removeEventListener('deviceorientation', handleOrientation);
     };
   }, [smoothing, hasPermission]);
 
-  return { ...data, requestAccess, hasPermission };
+  return { ...data, requestAccess, stopAccess, hasPermission };
 };
