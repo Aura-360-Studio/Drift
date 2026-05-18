@@ -4,13 +4,16 @@ import { useCompass } from './hooks/useCompass';
 import { useGeolocation } from './hooks/useGeolocation';
 import { useMagnetometer } from './hooks/useMagnetometer';
 import CompassDial from './components/compass/CompassDial';
-import { MapPin, Navigation, Settings, ShieldCheck, WifiOff, Activity, X, Bike, Smartphone, Compass as CompassIcon } from 'lucide-react';
+import { MapPin, Navigation, Settings, ShieldCheck, WifiOff, Activity, Bike, Smartphone, Compass as CompassIcon, Flashlight, AlertTriangle } from 'lucide-react';
 import QRCode from 'react-qr-code';
+
+import { useFlashlight } from './hooks/useFlashlight';
 
 function App() {
   const { heading, isSupported, hasPermission, requestAccess, stopAccess } = useCompass(0.15);
   const location = useGeolocation();
   const mag = useMagnetometer();
+  const flashlight = useFlashlight();
   const [isOffline, setIsOffline] = useState(!navigator.onLine);
   const [showSplash, setShowSplash] = useState(true);
   const [activeTab, setActiveTab] = useState<'compass' | 'maps' | 'lab' | 'prefs'>('compass');
@@ -371,6 +374,105 @@ function App() {
               </button>
             </div>
           </div>
+        )}
+
+        {/* MAPS / EMERGENCY VIEW */}
+        {activeTab === 'maps' && (
+          <motion.div 
+            initial={{ opacity: 0, x: 20 }}
+            animate={{ opacity: 1, x: 0 }}
+            className="flex-1 flex flex-col pt-4 relative"
+          >
+            {/* Header */}
+            <div className="mb-6">
+              <h2 className="text-2xl font-bold tracking-tight">Navigation</h2>
+              <p className="text-brand-accent text-xs uppercase tracking-widest mt-1">
+                {!isOffline && location.lat ? 'Online Services Active' : 'Offline Emergency Mode'}
+              </p>
+            </div>
+
+            {/* Offline / Emergency Pack */}
+            {(!location.lat || isOffline) ? (
+              <div className="flex-1 space-y-6">
+                <div className="glass-panel p-8 text-center flex flex-col items-center justify-center border-brand-accent/30 shadow-[0_0_30px_rgba(0,240,255,0.05)]">
+                  <div className="w-16 h-16 rounded-full bg-brand-accent/10 flex items-center justify-center mb-4">
+                    <AlertTriangle className="w-8 h-8 text-brand-accent" />
+                  </div>
+                  <h3 className="text-xl font-bold mb-2">Emergency Pack</h3>
+                  <p className="text-white/50 text-sm leading-relaxed max-w-[250px]">
+                    Internet connection lost. Core survival instruments remain fully operational.
+                  </p>
+                </div>
+
+                {/* Hardware Flashlight Toggle */}
+                <button 
+                  onClick={flashlight.toggle}
+                  className={`w-full p-6 rounded-2xl border transition-all flex items-center justify-between group ${
+                    flashlight.isOn 
+                      ? 'bg-white border-white text-black shadow-[0_0_40px_rgba(255,255,255,0.5)]' 
+                      : 'bg-white/5 border-white/10 text-white hover:bg-white/10'
+                  }`}
+                >
+                  <div className="flex items-center gap-4">
+                    <Flashlight className={`w-6 h-6 ${flashlight.isOn ? 'fill-black' : ''}`} />
+                    <span className="font-bold text-lg">SOS Flashlight</span>
+                  </div>
+                  <div className={`text-xs font-mono font-bold uppercase tracking-widest px-3 py-1 rounded-full ${flashlight.isOn ? 'bg-black/10' : 'bg-white/10 text-white/40'}`}>
+                    {flashlight.isOn ? 'Active' : 'Standby'}
+                  </div>
+                </button>
+
+                {/* Raw Coordinates Readout */}
+                <div className="glass-panel p-6 space-y-4">
+                  <div className="flex items-center gap-3 mb-2 text-white/40 uppercase text-[10px] tracking-widest font-bold">
+                    <MapPin className="w-4 h-4" /> Last Known Position
+                  </div>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="bg-white/5 p-4 rounded-xl text-center border border-white/5">
+                      <div className="text-white/30 text-[10px] uppercase mb-1">Latitude</div>
+                      <div className="font-mono text-brand-accent font-bold">{location.lat ? location.lat.toFixed(5) : 'Unknown'}</div>
+                    </div>
+                    <div className="bg-white/5 p-4 rounded-xl text-center border border-white/5">
+                      <div className="text-white/30 text-[10px] uppercase mb-1">Longitude</div>
+                      <div className="font-mono text-brand-accent font-bold">{location.lng ? location.lng.toFixed(5) : 'Unknown'}</div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            ) : (
+              /* Online Map View (Dark Mode Styled) */
+              <div className="flex-1 w-full rounded-3xl overflow-hidden border border-white/10 shadow-2xl relative bg-black">
+                {/* Fallback loading state while iframe loads */}
+                <div className="absolute inset-0 flex items-center justify-center -z-10">
+                  <div className="animate-pulse text-brand-accent text-sm tracking-widest uppercase font-mono">Syncing Satellite...</div>
+                </div>
+                {/* We use an OSM iframe and apply CSS filters to make it look like a sleek dark/night map */}
+                <iframe 
+                  title="Navigation Map"
+                  width="100%" 
+                  height="100%" 
+                  frameBorder="0" 
+                  scrolling="no" 
+                  marginHeight={0} 
+                  marginWidth={0} 
+                  src={`https://www.openstreetmap.org/export/embed.html?bbox=${(location.lng || 0) - 0.01},${(location.lat || 0) - 0.01},${(location.lng || 0) + 0.01},${(location.lat || 0) + 0.01}&layer=mapnik&marker=${location.lat || 0},${location.lng || 0}`}
+                  style={{ filter: 'invert(100%) hue-rotate(180deg) brightness(95%) contrast(90%)' }}
+                  className="w-full h-full object-cover opacity-90 mix-blend-screen"
+                />
+                
+                {/* HUD Overlay on Map */}
+                <div className="absolute bottom-4 left-4 right-4 pointer-events-none flex justify-between items-end">
+                  <div className="glass-panel px-4 py-3 rounded-2xl bg-black/60 backdrop-blur-md border border-white/10">
+                    <div className="text-[10px] uppercase tracking-widest text-white/50 mb-1">Coordinates</div>
+                    <div className="font-mono text-xs text-brand-accent">{location.lat?.toFixed(4) || '0.0000'}, {location.lng?.toFixed(4) || '0.0000'}</div>
+                  </div>
+                  <div className="glass-panel w-12 h-12 rounded-full bg-black/60 backdrop-blur-md border border-brand-accent/30 flex items-center justify-center animate-pulse shadow-[0_0_15px_rgba(0,240,255,0.2)]">
+                    <div className="w-3 h-3 bg-brand-accent rounded-full shadow-[0_0_10px_var(--color-brand-accent)]" />
+                  </div>
+                </div>
+              </div>
+            )}
+          </motion.div>
         )}
 
         {/* LAB VIEW */}

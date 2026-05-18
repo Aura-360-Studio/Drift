@@ -18,6 +18,7 @@ export const useCompass = (smoothing = 0.1) => {
   const [hasPermission, setHasPermission] = useState<boolean | null>(null);
 
   const headingRef = useRef(0);
+  const lastHapticHeading = useRef(0);
 
   const requestAccess = async () => {
     try {
@@ -73,6 +74,14 @@ export const useCompass = (smoothing = 0.1) => {
 
       const smoothed = lowPass(headingRef.current, rawHeading, smoothing);
       headingRef.current = normalizeAngle(smoothed);
+
+      // Subtle haptic feedback tick every 2 degrees of rotation
+      if (Math.abs(headingRef.current - lastHapticHeading.current) > 2) {
+        if (typeof navigator.vibrate === 'function') {
+          navigator.vibrate(5);
+        }
+        lastHapticHeading.current = headingRef.current;
+      }
 
       setData({
         heading: headingRef.current,
