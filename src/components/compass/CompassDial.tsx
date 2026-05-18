@@ -11,6 +11,10 @@ const CompassDial: React.FC<CompassDialProps> = ({ heading, lockedHeading }) => 
   
   return (
     <div className="relative w-80 h-80 md:w-[26rem] md:h-[26rem] flex items-center justify-center">
+      {/* Ambient Glow for Glassmorphism */}
+      <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-64 h-64 bg-brand-accent/30 rounded-full blur-[80px] pointer-events-none" />
+      <div className="absolute top-1/3 left-1/3 -translate-x-1/2 -translate-y-1/2 w-48 h-48 bg-brand-secondary/20 rounded-full blur-[60px] pointer-events-none" />
+
       {/* Outer Glow & Glass Bezel */}
       <div className="absolute inset-[-10px] rounded-full bg-brand-accent/5 blur-2xl pointer-events-none" />
       <div className="absolute inset-0 rounded-full border border-white/20 bg-white/5 backdrop-blur-3xl shadow-[0_8px_32px_rgba(0,0,0,0.5),inset_0_2px_4px_rgba(255,255,255,0.1)] pointer-events-none" />
@@ -61,9 +65,9 @@ const CompassDial: React.FC<CompassDialProps> = ({ heading, lockedHeading }) => 
       {/* 2026 Modern Hero Needle */}
       <div className="absolute inset-0 pointer-events-none z-30 flex items-center justify-center">
          {/* Top Half of Needle (North) */}
-         <div className="absolute bottom-1/2 w-1.5 h-32 bg-gradient-to-t from-brand-accent to-white rounded-t-full shadow-[0_0_20px_var(--color-brand-accent)]" />
+         <div className="absolute bottom-1/2 w-2 h-24 bg-gradient-to-t from-brand-accent to-white rounded-t-full shadow-[0_0_20px_var(--color-brand-accent)]" />
          {/* Bottom Half of Needle (South) */}
-         <div className="absolute top-1/2 w-1 h-24 bg-white/10 rounded-b-full shadow-inner" />
+         <div className="absolute top-1/2 w-1.5 h-16 bg-white/20 rounded-b-full shadow-inner" />
       </div>
 
       {/* Fixed Tactical Arrow Frame Indicator */}

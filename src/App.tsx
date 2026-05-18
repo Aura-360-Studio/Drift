@@ -14,6 +14,7 @@ function App() {
   const [isOffline, setIsOffline] = useState(!navigator.onLine);
   const [showSplash, setShowSplash] = useState(true);
   const [showLab, setShowLab] = useState(false);
+  const [showPrefs, setShowPrefs] = useState(false);
   const [lockedHeading, setLockedHeading] = useState<number | null>(null);
   const [isMobile, setIsMobile] = useState(true);
   const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
@@ -377,32 +378,31 @@ function App() {
         </div>
       </main>
 
-      {/* Bottom Navigation Dashboard */}
-      <nav className="fixed bottom-0 inset-x-0 pb-safe pt-2 px-6 bg-bg-elevated/90 backdrop-blur-3xl border-t border-brand-accent/20 z-40 shadow-[0_-10px_30px_rgba(0,240,255,0.05)]">
-        <div className="flex justify-between items-center max-w-md mx-auto mb-4 mt-2">
-          <button className="flex flex-col items-center gap-1 p-2 text-brand-accent group relative">
-            <div className="absolute inset-0 bg-brand-accent/10 blur-xl rounded-full" />
-            <CompassIcon className="w-6 h-6 relative z-10" />
-            <span className="text-[9px] font-bold tracking-widest relative z-10">DRIFT</span>
-            <div className="absolute -bottom-2 w-1 h-1 bg-brand-accent rounded-full shadow-[0_0_10px_var(--color-brand-accent)]" />
+      {/* Floating Stylish Dock Bottom Navigation */}
+      <nav className="fixed bottom-8 inset-x-0 z-40 flex justify-center pointer-events-none">
+        <div className="flex justify-between items-center gap-6 px-6 py-4 rounded-full bg-white/5 backdrop-blur-3xl border border-white/10 shadow-[0_10px_40px_rgba(0,0,0,0.5)] pointer-events-auto">
+          <button className="flex flex-col items-center gap-1 text-brand-accent group relative transition-transform active:scale-95">
+            <div className="absolute inset-0 bg-brand-accent/20 blur-lg rounded-full" />
+            <CompassIcon className="w-6 h-6 relative z-10 drop-shadow-[0_0_10px_var(--color-brand-accent)]" />
+            <div className="absolute -bottom-3 w-1 h-1 bg-brand-accent rounded-full shadow-[0_0_10px_var(--color-brand-accent)]" />
           </button>
           
-          <button className="flex flex-col items-center gap-1 p-2 text-brand-primary/40 hover:text-brand-primary transition-colors">
+          <button className="flex flex-col items-center gap-1 text-white/40 hover:text-white transition-all active:scale-95">
             <MapPin className="w-6 h-6" />
-            <span className="text-[9px] font-bold tracking-widest">MAPS</span>
           </button>
 
           <button 
             onClick={() => setShowLab(true)}
-            className="flex flex-col items-center gap-1 p-2 text-brand-primary/40 hover:text-brand-primary transition-colors hover:text-brand-secondary"
+            className="flex flex-col items-center gap-1 text-white/40 hover:text-brand-secondary transition-all active:scale-95"
           >
             <Activity className="w-6 h-6" />
-            <span className="text-[9px] font-bold tracking-widest">LAB</span>
           </button>
 
-          <button className="flex flex-col items-center gap-1 p-2 text-brand-primary/40 hover:text-brand-primary transition-colors">
+          <button 
+            onClick={() => setShowPrefs(true)}
+            className="flex flex-col items-center gap-1 text-white/40 hover:text-white transition-all active:scale-95"
+          >
             <Settings className="w-6 h-6" />
-            <span className="text-[9px] font-bold tracking-widest">PREFS</span>
           </button>
         </div>
       </nav>
@@ -484,6 +484,88 @@ function App() {
                 <p className="text-white/20 text-xs leading-relaxed uppercase tracking-widest">
                   System Status: {mag.isSupported ? 'All Sensors Operational' : 'Limited Sensor Support'}
                 </p>
+              </div>
+            </div>
+          </motion.div>
+        )}
+      {/* Settings / Permissions Modal */}
+      <AnimatePresence>
+        {showPrefs && (
+          <motion.div 
+            initial={{ opacity: 0, y: 100 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: 100 }}
+            className="fixed inset-0 z-50 bg-black/80 backdrop-blur-3xl p-6 flex flex-col"
+          >
+            <div className="flex justify-between items-center mb-8">
+              <div>
+                <h2 className="text-2xl font-bold tracking-tight">Settings</h2>
+                <p className="text-white/40 text-xs uppercase tracking-widest mt-1">System & Permissions</p>
+              </div>
+              <button 
+                onClick={() => setShowPrefs(false)}
+                className="p-3 bg-white/10 hover:bg-white/20 rounded-full transition-colors"
+              >
+                <X className="w-6 h-6" />
+              </button>
+            </div>
+
+            <div className="flex-1 overflow-y-auto space-y-6 pb-32">
+              <div className="space-y-2">
+                <h3 className="text-brand-accent text-[10px] font-bold uppercase tracking-widest ml-2">Hardware Permissions</h3>
+                <div className="glass-panel overflow-hidden divide-y divide-white/10">
+                  {/* Compass / Orientation */}
+                  <div className="p-5 flex justify-between items-center">
+                    <div className="flex items-center gap-4">
+                      <div className={`p-2 rounded-xl ${hasPermission ? 'bg-brand-accent/20 text-brand-accent' : 'bg-white/10 text-white/40'}`}>
+                        <CompassIcon className="w-5 h-5" />
+                      </div>
+                      <div>
+                        <p className="font-semibold text-sm text-white">Orientation Sensor</p>
+                        <p className="text-xs text-white/50">{hasPermission ? 'Active & Calibrated' : 'Permission Required'}</p>
+                      </div>
+                    </div>
+                    <button 
+                      onClick={hasPermission ? undefined : requestAccess}
+                      className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${hasPermission ? 'bg-brand-accent' : 'bg-white/20'}`}
+                    >
+                      <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${hasPermission ? 'translate-x-6' : 'translate-x-1'}`} />
+                    </button>
+                  </div>
+
+                  {/* Location */}
+                  <div className="p-5 flex justify-between items-center">
+                    <div className="flex items-center gap-4">
+                      <div className={`p-2 rounded-xl ${(location.lat && location.lng) ? 'bg-brand-accent/20 text-brand-accent' : 'bg-white/10 text-white/40'}`}>
+                        <MapPin className="w-5 h-5" />
+                      </div>
+                      <div>
+                        <p className="font-semibold text-sm text-white">Location Services</p>
+                        <p className="text-xs text-white/50">{(location.lat && location.lng) ? 'Active' : 'Awaiting Data'}</p>
+                      </div>
+                    </div>
+                    <button className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${(location.lat && location.lng) ? 'bg-brand-accent' : 'bg-white/20'}`}>
+                      <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${(location.lat && location.lng) ? 'translate-x-6' : 'translate-x-1'}`} />
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <h3 className="text-brand-accent text-[10px] font-bold uppercase tracking-widest ml-2">App Status</h3>
+                <div className="glass-panel overflow-hidden divide-y divide-white/10">
+                  <div className="p-5 flex justify-between items-center">
+                    <div className="flex items-center gap-4">
+                      <div className={`p-2 rounded-xl ${!isOffline ? 'bg-brand-accent/20 text-brand-accent' : 'bg-red-500/20 text-red-500'}`}>
+                        <WifiOff className="w-5 h-5" />
+                      </div>
+                      <div>
+                        <p className="font-semibold text-sm text-white">Network State</p>
+                        <p className="text-xs text-white/50">{!isOffline ? 'Online & Syncing' : 'Offline Mode Active'}</p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
               </div>
             </div>
           </motion.div>
