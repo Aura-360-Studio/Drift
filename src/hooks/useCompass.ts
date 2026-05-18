@@ -78,15 +78,16 @@ export const useCompass = (smoothing = 0.1) => {
     };
 
     // Chrome Android uses deviceorientationabsolute for absolute compass
-    if ('ondeviceorientationabsolute' in window) {
-      window.addEventListener('deviceorientationabsolute', handleOrientation);
+    const hasAbsolute = typeof (window as any).ondeviceorientationabsolute !== 'undefined';
+    if (hasAbsolute) {
+      (window as any).addEventListener('deviceorientationabsolute', handleOrientation);
     } else {
       window.addEventListener('deviceorientation', handleOrientation);
     }
 
     return () => {
-      if ('ondeviceorientationabsolute' in window) {
-        window.removeEventListener('deviceorientationabsolute', handleOrientation);
+      if (hasAbsolute) {
+        (window as any).removeEventListener('deviceorientationabsolute', handleOrientation);
       } else {
         window.removeEventListener('deviceorientation', handleOrientation);
       }

@@ -4,11 +4,11 @@ import { useCompass } from './hooks/useCompass';
 import { useGeolocation } from './hooks/useGeolocation';
 import { useMagnetometer } from './hooks/useMagnetometer';
 import CompassDial from './components/compass/CompassDial';
-import { MapPin, Navigation, Settings, ShieldCheck, WifiOff, Activity, X, Bike, Compass as CompassIcon } from 'lucide-react';
+import { MapPin, Navigation, Settings, ShieldCheck, WifiOff, Activity, X, Bike, Smartphone, Compass as CompassIcon } from 'lucide-react';
 import QRCode from 'react-qr-code';
 
 function App() {
-  const { heading, isSupported, error: sensorError, hasPermission, requestAccess } = useCompass(0.15);
+  const { heading, isSupported, hasPermission, requestAccess } = useCompass(0.15);
   const location = useGeolocation();
   const mag = useMagnetometer();
   const [isOffline, setIsOffline] = useState(!navigator.onLine);
@@ -70,11 +70,6 @@ function App() {
         setShowPwaPrompt(false);
       }
     }
-  };
-
-  const getCardinal = (angle: number) => {
-    const directions = ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW'];
-    return directions[Math.round(angle / 45) % 8];
   };
 
   if (!isMobile) {
