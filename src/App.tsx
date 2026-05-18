@@ -458,34 +458,55 @@ function App() {
                 </div>
               </div>
             ) : (
-              /* Online Map View (Dark Mode Styled) */
-              <div className="flex-1 w-full rounded-3xl overflow-hidden border border-white/10 shadow-2xl relative bg-black">
-                {/* Fallback loading state while iframe loads */}
-                <div className="absolute inset-0 flex items-center justify-center -z-10">
-                  <div className="animate-pulse text-brand-accent text-sm tracking-widest uppercase font-mono">Syncing Satellite...</div>
-                </div>
-                {/* We use an OSM iframe and apply CSS filters to make it look like a sleek dark/night map */}
-                <iframe 
-                  title="Navigation Map"
-                  width="100%" 
-                  height="100%" 
-                  frameBorder="0" 
-                  scrolling="no" 
-                  marginHeight={0} 
-                  marginWidth={0} 
-                  src={`https://www.openstreetmap.org/export/embed.html?bbox=${(location.lng || 0) - 0.01},${(location.lat || 0) - 0.01},${(location.lng || 0) + 0.01},${(location.lat || 0) + 0.01}&layer=mapnik&marker=${location.lat || 0},${location.lng || 0}`}
-                  style={{ filter: 'invert(100%) hue-rotate(180deg) brightness(95%) contrast(90%)' }}
-                  className="w-full h-full object-cover opacity-90 mix-blend-screen"
-                />
+              /* Online Radar View */
+              <div className="flex-1 w-full rounded-3xl overflow-hidden border border-white/10 shadow-2xl relative bg-black/50 flex flex-col items-center justify-center">
                 
-                {/* HUD Overlay on Map */}
-                <div className="absolute bottom-4 left-4 right-4 pointer-events-none flex justify-between items-end">
-                  <div className="glass-panel px-4 py-3 rounded-2xl bg-black/60 backdrop-blur-md border border-white/10">
-                    <div className="text-[10px] uppercase tracking-widest text-white/50 mb-1">Coordinates</div>
-                    <div className="font-mono text-xs text-brand-accent">{location.lat?.toFixed(4) || '0.0000'}, {location.lng?.toFixed(4) || '0.0000'}</div>
+                {/* Radar Rings */}
+                <div className="absolute inset-0 flex items-center justify-center opacity-30 pointer-events-none">
+                  <div className="absolute w-[120%] aspect-square rounded-full border border-brand-accent/30"></div>
+                  <div className="absolute w-[90%] aspect-square rounded-full border border-brand-accent/40"></div>
+                  <div className="absolute w-[60%] aspect-square rounded-full border border-brand-accent/50 text-center flex items-start justify-center pt-2 text-[10px] text-brand-accent/50 font-mono">10m</div>
+                  <div className="absolute w-[30%] aspect-square rounded-full border border-brand-accent/60"></div>
+                  
+                  {/* Radar Sweep */}
+                  <div className="absolute w-[50%] h-[50%] origin-bottom-right bottom-1/2 right-1/2 bg-gradient-to-tr from-brand-accent/0 via-brand-accent/10 to-brand-accent/40 animate-[spin_3s_linear_infinite]" style={{ clipPath: 'polygon(100% 100%, 100% 0, 0 0)' }}></div>
+                </div>
+
+                <div className="relative z-10 text-center space-y-8 mt-10">
+                  <div className="inline-block p-5 rounded-full bg-brand-accent/10 border border-brand-accent/30 shadow-[0_0_30px_rgba(0,240,255,0.2)]">
+                    <Navigation className="w-10 h-10 text-brand-accent animate-pulse" />
                   </div>
-                  <div className="glass-panel w-12 h-12 rounded-full bg-black/60 backdrop-blur-md border border-brand-accent/30 flex items-center justify-center animate-pulse shadow-[0_0_15px_rgba(0,240,255,0.2)]">
-                    <div className="w-3 h-3 bg-brand-accent rounded-full shadow-[0_0_10px_var(--color-brand-accent)]" />
+                  <div className="space-y-2">
+                    <div className="text-[10px] uppercase tracking-[0.3em] text-white/40 font-bold mb-4">Tactical Positioning</div>
+                    <div className="text-3xl font-mono font-light text-white tracking-widest drop-shadow-[0_0_10px_rgba(255,255,255,0.3)]">
+                      {location.lat?.toFixed(5) || '0.00000'}
+                    </div>
+                    <div className="text-3xl font-mono font-light text-white tracking-widest drop-shadow-[0_0_10px_rgba(255,255,255,0.3)]">
+                      {location.lng?.toFixed(5) || '0.00000'}
+                    </div>
+                  </div>
+                  
+                  <div className="flex gap-4 justify-center pt-4">
+                    <div className="glass-panel px-5 py-3 rounded-xl border border-white/10 flex flex-col items-center">
+                      <span className="text-[9px] uppercase tracking-widest text-white/40 mb-1">Velocity</span>
+                      <span className="text-sm font-mono text-brand-accent font-bold">{location.speed ? location.speed.toFixed(1) : '0.0'} <span className="text-[9px]">m/s</span></span>
+                    </div>
+                    <div className="glass-panel px-5 py-3 rounded-xl border border-white/10 flex flex-col items-center">
+                      <span className="text-[9px] uppercase tracking-widest text-white/40 mb-1">Altitude</span>
+                      <span className="text-sm font-mono text-brand-accent font-bold">{location.altitude ? location.altitude.toFixed(0) : '---'} <span className="text-[9px]">m</span></span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* HUD Overlay */}
+                <div className="absolute bottom-4 left-4 right-4 pointer-events-none flex justify-between items-end">
+                  <div className="text-[10px] font-mono tracking-widest text-white/30 uppercase">
+                    Accuracy: {location.accuracy ? location.accuracy.toFixed(0) : '---'}m
+                  </div>
+                  <div className="flex gap-1">
+                    <div className="w-1 h-3 bg-brand-accent rounded-full animate-pulse"></div>
+                    <div className="w-1 h-4 bg-brand-accent rounded-full animate-pulse delay-75"></div>
+                    <div className="w-1 h-2 bg-brand-accent rounded-full animate-pulse delay-150"></div>
                   </div>
                 </div>
               </div>

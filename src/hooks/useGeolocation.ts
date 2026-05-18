@@ -5,6 +5,7 @@ interface LocationData {
   lng: number | null;
   altitude: number | null;
   accuracy: number | null;
+  speed: number | null;
   error: string | null;
 }
 
@@ -14,6 +15,7 @@ export const useGeolocation = () => {
     lng: null,
     altitude: null,
     accuracy: null,
+    speed: null,
     error: null,
   });
 
@@ -30,6 +32,7 @@ export const useGeolocation = () => {
           lng: position.coords.longitude,
           altitude: position.coords.altitude,
           accuracy: position.coords.accuracy,
+          speed: position.coords.speed,
           error: null,
         });
       },

@@ -21,6 +21,13 @@ export const useCompass = (smoothing = 0.1, hapticsEnabled = true) => {
 
   const headingRef = useRef(0);
   const lastHapticHeading = useRef(0);
+  
+  // Use a ref to ensure the event listener always reads the latest haptics prop
+  // without needing to constantly remove/re-add the event listener.
+  const hapticsRef = useRef(hapticsEnabled);
+  useEffect(() => {
+    hapticsRef.current = hapticsEnabled;
+  }, [hapticsEnabled]);
 
   const requestAccess = async () => {
     try {
@@ -81,7 +88,7 @@ export const useCompass = (smoothing = 0.1, hapticsEnabled = true) => {
       headingRef.current = normalizeAngle(smoothed);
 
       // Subtle haptic feedback tick every 20 degrees of rotation
-      if (hapticsEnabled && Math.abs(headingRef.current - lastHapticHeading.current) > 20) {
+      if (hapticsRef.current && Math.abs(headingRef.current - lastHapticHeading.current) > 20) {
         if (typeof navigator.vibrate === 'function') {
           navigator.vibrate(5);
         }
