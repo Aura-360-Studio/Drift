@@ -10,13 +10,15 @@ import QRCode from 'react-qr-code';
 import { useFlashlight } from './hooks/useFlashlight';
 
 function App() {
-  const { heading, isSupported, hasPermission, requestAccess, stopAccess } = useCompass(0.15);
+  const [activeTab, setActiveTab] = useState<'compass' | 'maps' | 'lab' | 'prefs'>('compass');
+  const [hapticsEnabled, setHapticsEnabled] = useState<boolean>(() => localStorage.getItem('drift_haptics') !== 'false');
+  
+  const { heading, isSupported, hasPermission, requestAccess, stopAccess } = useCompass(0.15, hapticsEnabled && activeTab === 'compass');
   const location = useGeolocation();
   const mag = useMagnetometer();
   const flashlight = useFlashlight();
   const [isOffline, setIsOffline] = useState(!navigator.onLine);
   const [showSplash, setShowSplash] = useState(true);
-  const [activeTab, setActiveTab] = useState<'compass' | 'maps' | 'lab' | 'prefs'>('compass');
   const [lockedHeading, setLockedHeading] = useState<number | null>(null);
   const [isMobile, setIsMobile] = useState(true);
   const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
@@ -71,6 +73,22 @@ function App() {
         setDeferredPrompt(null);
         setShowPwaPrompt(false);
       }
+    }
+  };
+
+  const handleNav = (tab: 'compass' | 'maps' | 'lab' | 'prefs') => {
+    if (hapticsEnabled && typeof navigator.vibrate === 'function') {
+      navigator.vibrate(5);
+    }
+    setActiveTab(tab);
+  };
+
+  const toggleHaptics = () => {
+    const newState = !hapticsEnabled;
+    setHapticsEnabled(newState);
+    localStorage.setItem('drift_haptics', newState ? 'true' : 'false');
+    if (newState && typeof navigator.vibrate === 'function') {
+      navigator.vibrate(10);
     }
   };
 
@@ -583,13 +601,31 @@ function App() {
                   <button 
                     onClick={() => {
                       if (location.lat) {
-                        // Normally we'd unmount or clear the geo watch ID here.
                         alert("Please disable location services from your browser settings.");
                       }
                     }}
                     className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${(location.lat && location.lng) ? 'bg-brand-accent' : 'bg-white/20'}`}
                   >
                     <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${(location.lat && location.lng) ? 'translate-x-6' : 'translate-x-1'}`} />
+                  </button>
+                </div>
+
+                {/* Haptics */}
+                <div className="p-5 flex justify-between items-center">
+                  <div className="flex items-center gap-4">
+                    <div className={`p-2 rounded-xl ${hapticsEnabled ? 'bg-brand-accent/20 text-brand-accent' : 'bg-white/10 text-white/40'}`}>
+                      <Activity className="w-5 h-5" />
+                    </div>
+                    <div>
+                      <p className="font-semibold text-sm text-white">Haptic Feedback</p>
+                      <p className="text-xs text-white/50">{hapticsEnabled ? 'Physical Ticks Active' : 'Silent Mode'}</p>
+                    </div>
+                  </div>
+                  <button 
+                    onClick={toggleHaptics}
+                    className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${hapticsEnabled ? 'bg-brand-accent' : 'bg-white/20'}`}
+                  >
+                    <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${hapticsEnabled ? 'translate-x-6' : 'translate-x-1'}`} />
                   </button>
                 </div>
               </div>
@@ -619,7 +655,7 @@ function App() {
       <nav className="fixed bottom-8 inset-x-0 z-40 flex justify-center pointer-events-none">
         <div className="flex justify-between items-center gap-8 px-8 py-4 rounded-full bg-white/5 backdrop-blur-3xl border border-white/10 shadow-[0_10px_40px_rgba(0,0,0,0.5)] pointer-events-auto">
           <button 
-            onClick={() => setActiveTab('compass')}
+            onClick={() => handleNav('compass')}
             className={`flex flex-col items-center gap-1 group relative transition-all active:scale-95 ${activeTab === 'compass' ? 'text-brand-accent' : 'text-white/40 hover:text-white'}`}
           >
             {activeTab === 'compass' && <div className="absolute inset-0 bg-brand-accent/20 blur-lg rounded-full" />}
@@ -628,7 +664,7 @@ function App() {
           </button>
           
           <button 
-            onClick={() => setActiveTab('maps')}
+            onClick={() => handleNav('maps')}
             className={`flex flex-col items-center gap-1 group relative transition-all active:scale-95 ${activeTab === 'maps' ? 'text-brand-accent' : 'text-white/40 hover:text-white'}`}
           >
             {activeTab === 'maps' && <div className="absolute inset-0 bg-brand-accent/20 blur-lg rounded-full" />}
@@ -637,7 +673,7 @@ function App() {
           </button>
 
           <button 
-            onClick={() => setActiveTab('lab')}
+            onClick={() => handleNav('lab')}
             className={`flex flex-col items-center gap-1 group relative transition-all active:scale-95 ${activeTab === 'lab' ? 'text-brand-secondary' : 'text-white/40 hover:text-white'}`}
           >
             {activeTab === 'lab' && <div className="absolute inset-0 bg-brand-secondary/20 blur-lg rounded-full" />}
@@ -646,7 +682,7 @@ function App() {
           </button>
 
           <button 
-            onClick={() => setActiveTab('prefs')}
+            onClick={() => handleNav('prefs')}
             className={`flex flex-col items-center gap-1 group relative transition-all active:scale-95 ${activeTab === 'prefs' ? 'text-white' : 'text-white/40 hover:text-white'}`}
           >
             <Settings className="w-6 h-6 relative z-10" />

@@ -8,14 +8,16 @@ interface CompassData {
   error: string | null;
 }
 
-export const useCompass = (smoothing = 0.1) => {
+export const useCompass = (smoothing = 0.1, hapticsEnabled = true) => {
   const [data, setData] = useState<CompassData>({
     heading: 0,
     accuracy: 0,
     isSupported: true,
     error: null,
   });
-  const [hasPermission, setHasPermission] = useState<boolean | null>(null);
+  const [hasPermission, setHasPermission] = useState<boolean | null>(() => {
+    return localStorage.getItem('drift_sensor_permission') === 'granted' ? true : null;
+  });
 
   const headingRef = useRef(0);
   const lastHapticHeading = useRef(0);
@@ -25,6 +27,7 @@ export const useCompass = (smoothing = 0.1) => {
       if (typeof (DeviceOrientationEvent as any).requestPermission === 'function') {
         const permissionState = await (DeviceOrientationEvent as any).requestPermission();
         if (permissionState === 'granted') {
+          localStorage.setItem('drift_sensor_permission', 'granted');
           setHasPermission(true);
         } else {
           setData(prev => ({ ...prev, error: 'Permission denied' }));
@@ -32,6 +35,7 @@ export const useCompass = (smoothing = 0.1) => {
           return false;
         }
       } else {
+        localStorage.setItem('drift_sensor_permission', 'granted');
         setHasPermission(true);
       }
       return true;
@@ -43,6 +47,7 @@ export const useCompass = (smoothing = 0.1) => {
   };
 
   const stopAccess = () => {
+    localStorage.removeItem('drift_sensor_permission');
     setHasPermission(false);
   };
 
@@ -75,8 +80,8 @@ export const useCompass = (smoothing = 0.1) => {
       const smoothed = lowPass(headingRef.current, rawHeading, smoothing);
       headingRef.current = normalizeAngle(smoothed);
 
-      // Subtle haptic feedback tick every 2 degrees of rotation
-      if (Math.abs(headingRef.current - lastHapticHeading.current) > 2) {
+      // Subtle haptic feedback tick every 20 degrees of rotation
+      if (hapticsEnabled && Math.abs(headingRef.current - lastHapticHeading.current) > 20) {
         if (typeof navigator.vibrate === 'function') {
           navigator.vibrate(5);
         }
