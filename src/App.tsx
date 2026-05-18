@@ -488,6 +488,8 @@ function App() {
             </div>
           </motion.div>
         )}
+      </AnimatePresence>
+
       {/* Settings / Permissions Modal */}
       <AnimatePresence>
         {showPrefs && (
