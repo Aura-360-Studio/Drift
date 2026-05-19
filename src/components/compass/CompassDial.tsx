@@ -1,7 +1,7 @@
 import React from 'react';
 import { motion } from 'framer-motion';
 import { Sun, Moon } from 'lucide-react';
-import { CelestialData } from '../../hooks/useCelestial';
+import type { CelestialData } from '../../hooks/useCelestial';
 
 interface CompassDialProps {
   heading: number;

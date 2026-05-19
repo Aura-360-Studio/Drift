@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { lowPass, normalizeAngle } from '../utils/math';
+
 
 interface CompassData {
   heading: number;

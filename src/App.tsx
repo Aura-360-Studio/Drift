@@ -620,7 +620,6 @@ function App() {
                   
                   <div className="flex gap-4 justify-center pt-4">
                     <div className="glass-panel px-5 py-3 rounded-xl border border-white/10 flex flex-col items-center">
-                    <div className="glass-panel px-5 py-3 rounded-xl border border-white/10 flex flex-col items-center">
                       <span className="text-[9px] uppercase tracking-widest text-white/40 mb-1">Altitude</span>
                       <span className="text-sm font-mono text-brand-accent font-bold">{location.altitude ? location.altitude.toFixed(0) : '---'} <span className="text-[9px]">m</span></span>
                     </div>
@@ -633,7 +632,7 @@ function App() {
                       </div>
                       <div>
                         <div className="text-white/40 text-[10px] uppercase tracking-widest font-bold">Accuracy</div>
-                        <div className="font-mono text-xl text-white">±{location.accuracy.toFixed(0)}m</div>
+                        <div className="font-mono text-xl text-white">±{location.accuracy?.toFixed(0) || '---'}m</div>
                       </div>
                     </div>
 
