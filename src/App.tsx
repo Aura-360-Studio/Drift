@@ -1008,6 +1008,19 @@ function App() {
                 </div>
               </div>
             </div>
+
+            <div className="space-y-2">
+              <h3 className="text-brand-accent text-[10px] font-bold uppercase tracking-widest ml-2">About</h3>
+              <div className="glass-panel p-6 text-center space-y-4 border border-white/10">
+                <p className="text-sm text-white/70 leading-relaxed">
+                  Drift is an experiment from Aura Labs. To explore more procedural interfaces, <a href="https://labs.aura360studio.com/" target="_blank" rel="noopener noreferrer" className="text-brand-accent hover:underline font-medium">check our lab</a>.
+                </p>
+                <div className="w-8 h-px bg-white/10 mx-auto" />
+                <p className="text-[10px] text-white/40 uppercase tracking-widest font-bold">
+                  Powered By <a href="https://aura360studio.com/showcase" target="_blank" rel="noopener noreferrer" className="text-white hover:text-brand-accent transition-colors">Aura360studio</a>
+                </p>
+              </div>
+            </div>
           </motion.div>
         )}
       </main>
