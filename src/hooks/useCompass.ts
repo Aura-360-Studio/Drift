@@ -8,7 +8,7 @@ interface CompassData {
   error: string | null;
 }
 
-export const useCompass = (smoothing = 0.1, hapticsEnabled = true) => {
+export const useCompass = (smoothing = 0.1, hapticsEnabled = true, onTick?: () => void) => {
   const [data, setData] = useState<CompassData>({
     heading: 0,
     accuracy: 0,
@@ -25,9 +25,12 @@ export const useCompass = (smoothing = 0.1, hapticsEnabled = true) => {
   // Use a ref to ensure the event listener always reads the latest haptics prop
   // without needing to constantly remove/re-add the event listener.
   const hapticsRef = useRef(hapticsEnabled);
+  const onTickRef = useRef(onTick);
+
   useEffect(() => {
     hapticsRef.current = hapticsEnabled;
-  }, [hapticsEnabled]);
+    onTickRef.current = onTick;
+  }, [hapticsEnabled, onTick]);
 
   const requestAccess = async () => {
     try {
@@ -84,13 +87,22 @@ export const useCompass = (smoothing = 0.1, hapticsEnabled = true) => {
 
       if (rawHeading === null) return;
 
-      const smoothed = lowPass(headingRef.current, rawHeading, smoothing);
-      headingRef.current = normalizeAngle(smoothed);
+      // Calculate shortest path difference to the new raw reading
+      const diff = ((((rawHeading - headingRef.current) % 360) + 540) % 360) - 180;
+      
+      // Update target angle continuously
+      const target = headingRef.current + diff;
+      
+      // Smooth towards the target (standard low-pass, no modulo needed since they are continuous)
+      headingRef.current = headingRef.current + (target - headingRef.current) * smoothing;
 
-      // Subtle haptic feedback tick every 20 degrees of rotation
-      if (hapticsRef.current && Math.abs(headingRef.current - lastHapticHeading.current) > 20) {
-        if (typeof navigator.vibrate === 'function') {
+      // Haptic & Sound tick check on the continuous value
+      if (Math.abs(headingRef.current - lastHapticHeading.current) >= 20) {
+        if (hapticsRef.current && typeof navigator.vibrate === 'function') {
           navigator.vibrate(5);
+        }
+        if (onTickRef.current) {
+          onTickRef.current();
         }
         lastHapticHeading.current = headingRef.current;
       }

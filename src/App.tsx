@@ -4,25 +4,53 @@ import { useCompass } from './hooks/useCompass';
 import { useGeolocation } from './hooks/useGeolocation';
 import { useMagnetometer } from './hooks/useMagnetometer';
 import CompassDial from './components/compass/CompassDial';
-import { MapPin, Navigation, Settings, ShieldCheck, WifiOff, Activity, Bike, Smartphone, Compass as CompassIcon, Flashlight, AlertTriangle } from 'lucide-react';
+import { MapPin, Navigation, Settings, ShieldCheck, WifiOff, Activity, Bike, Smartphone, Compass as CompassIcon, Flashlight, AlertTriangle, Share2, Volume2, RefreshCcw, Sun, Moon, Trash2 } from 'lucide-react';
 import QRCode from 'react-qr-code';
-
+import { normalizeAngle, getDistance, getBearing } from './utils/math';
+import { useSound } from './hooks/useSound';
 import { useFlashlight } from './hooks/useFlashlight';
+import { useOrientation } from './hooks/useOrientation';
+import { useCelestial } from './hooks/useCelestial';
+import CalibrationModal from './components/compass/CalibrationModal';
 
 function App() {
   const [activeTab, setActiveTab] = useState<'compass' | 'maps' | 'lab' | 'prefs'>('compass');
   const [hapticsEnabled, setHapticsEnabled] = useState<boolean>(() => localStorage.getItem('drift_haptics') !== 'false');
+  const [soundEnabled, setSoundEnabled] = useState<boolean>(() => localStorage.getItem('drift_sound') !== 'false');
   
-  const { heading, isSupported, hasPermission, requestAccess, stopAccess } = useCompass(0.15, hapticsEnabled && activeTab === 'compass');
+  const { initAudio, playTick, playLock } = useSound(soundEnabled);
+  const { heading, isSupported, hasPermission, requestAccess, stopAccess } = useCompass(0.15, hapticsEnabled && activeTab === 'compass', activeTab === 'compass' ? playTick : undefined);
   const location = useGeolocation();
   const mag = useMagnetometer();
   const flashlight = useFlashlight();
+  const orientation = useOrientation();
+  const celestial = useCelestial(location.lat, location.lng);
+  
   const [isOffline, setIsOffline] = useState(!navigator.onLine);
   const [showSplash, setShowSplash] = useState(true);
   const [lockedHeading, setLockedHeading] = useState<number | null>(null);
   const [isMobile, setIsMobile] = useState(true);
   const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
   const [showPwaPrompt, setShowPwaPrompt] = useState(false);
+  const [isStandalone, setIsStandalone] = useState(false);
+  const [showCalibration, setShowCalibration] = useState(false);
+
+  const [waypoint, setWaypoint] = useState<{lat: number, lng: number, timestamp: number} | null>(() => {
+    const saved = localStorage.getItem('drift_waypoint');
+    return saved ? JSON.parse(saved) : null;
+  });
+
+  let waypointBearing: number | null = null;
+  let waypointDistance: number | null = null;
+
+  if (waypoint && location.lat && location.lng) {
+    waypointBearing = getBearing(location.lat, location.lng, waypoint.lat, waypoint.lng);
+    waypointDistance = getDistance(location.lat, location.lng, waypoint.lat, waypoint.lng);
+  }
+
+  useEffect(() => {
+    setIsStandalone(window.matchMedia('(display-mode: standalone)').matches);
+  }, []);
 
   useEffect(() => {
     const checkMobile = () => {
@@ -72,11 +100,49 @@ function App() {
       if (outcome === 'accepted') {
         setDeferredPrompt(null);
         setShowPwaPrompt(false);
+        setIsStandalone(true);
       }
     }
   };
 
+  const handleHardRefresh = async () => {
+    if ('serviceWorker' in navigator) {
+      const registrations = await navigator.serviceWorker.getRegistrations();
+      for (let registration of registrations) {
+        await registration.unregister();
+      }
+    }
+    if ('caches' in window) {
+      const keys = await caches.keys();
+      for (let key of keys) {
+        await caches.delete(key);
+      }
+    }
+    window.location.reload();
+  };
+
+  const handleShareLocation = async () => {
+    if (!location.lat || !location.lng) return;
+    
+    const text = `📍 DRIFT Tactical Position\nLAT: ${location.lat.toFixed(5)}\nLON: ${location.lng.toFixed(5)}\nALT: ${location.altitude ? location.altitude.toFixed(1) + 'm' : 'Unknown'}\nSPD: ${location.speed ? location.speed.toFixed(1) + 'm/s' : '0.0m/s'}\n\nMap: https://maps.google.com/?q=${location.lat},${location.lng}`;
+    
+    if (navigator.share) {
+      try {
+        await navigator.share({
+          title: 'My Drift Position',
+          text: text,
+        });
+      } catch (err) {
+        console.log('Error sharing', err);
+      }
+    } else {
+      navigator.clipboard.writeText(text);
+      alert('Location details copied to clipboard!');
+    }
+  };
+
   const handleNav = (tab: 'compass' | 'maps' | 'lab' | 'prefs') => {
+    initAudio();
     if (hapticsEnabled && typeof navigator.vibrate === 'function') {
       navigator.vibrate(5);
     }
@@ -90,6 +156,28 @@ function App() {
     if (newState && typeof navigator.vibrate === 'function') {
       navigator.vibrate(10);
     }
+  };
+
+  const toggleSound = () => {
+    initAudio();
+    const newState = !soundEnabled;
+    setSoundEnabled(newState);
+    localStorage.setItem('drift_sound', newState ? 'true' : 'false');
+  };
+
+  const handleDropPin = () => {
+    if (!location.lat || !location.lng) return;
+    initAudio();
+    playLock();
+    const newWaypoint = { lat: location.lat, lng: location.lng, timestamp: Date.now() };
+    setWaypoint(newWaypoint);
+    localStorage.setItem('drift_waypoint', JSON.stringify(newWaypoint));
+  };
+
+  const handleClearPin = () => {
+    initAudio();
+    setWaypoint(null);
+    localStorage.removeItem('drift_waypoint');
   };
 
   if (!isMobile) {
@@ -215,7 +303,10 @@ function App() {
 
           {/* Explore Anyway Button */}
           <button 
-            onClick={() => setIsMobile(true)}
+            onClick={() => {
+              setIsMobile(true);
+              initAudio();
+            }}
             className="mt-4 px-6 py-2.5 bg-white/5 hover:bg-white/10 border border-white/10 rounded-full text-xs font-semibold text-white/60 hover:text-white transition-all uppercase tracking-wider"
           >
             Explore Anyway
@@ -226,24 +317,7 @@ function App() {
     );
   }
 
-  if (!isSupported) {
-    return (
-      <div className="min-h-screen bg-bg-deep flex flex-items-center justify-center p-8 text-center">
-        <div className="max-w-md space-y-6">
-          <div className="w-20 h-20 mx-auto bg-red-500/10 rounded-full flex items-center justify-center">
-            <ShieldCheck className="w-10 h-10 text-brand-accent" />
-          </div>
-          <h1 className="text-3xl font-bold tracking-tight">Sensor Not Found</h1>
-          <p className="text-white/60 leading-relaxed">
-            Sorry, your device currently doesn't support advanced compass sensors in web apps.
-          </p>
-          <button className="w-full py-4 bg-white text-black font-semibold rounded-2xl active:scale-95 transition-transform">
-            I'm Interested in Native App
-          </button>
-        </div>
-      </div>
-    );
-  }
+
 
   return (
     <div className="relative min-h-screen bg-bg-deep text-brand-primary selection:bg-brand-accent/30 overflow-hidden font-sans">
@@ -297,32 +371,7 @@ function App() {
         
         {activeTab === 'compass' && (
           <div className="flex-1 flex flex-col items-center justify-center min-h-[400px]">
-            {/* Sensor Permission Overlay */}
-            <AnimatePresence>
-              {(hasPermission === null || hasPermission === false) && (
-                <motion.div 
-                  initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-                  className="absolute inset-0 z-40 bg-black/80 backdrop-blur-xl flex items-center justify-center p-8"
-                >
-                  <div className="glass-panel p-10 max-w-sm w-full text-center space-y-8 relative overflow-hidden">
-                    <div className="absolute top-0 inset-x-0 h-1 bg-gradient-to-r from-brand-accent via-white to-brand-accent opacity-50" />
-                    <CompassIcon className="w-16 h-16 mx-auto text-brand-accent opacity-80" />
-                    <div className="space-y-2">
-                      <h2 className="text-2xl font-bold">Sensor Calibration</h2>
-                      <p className="text-white/60 text-sm">Drift requires access to your device's orientation sensors to provide a high-fidelity compass experience.</p>
-                    </div>
-                    <button 
-                      onClick={requestAccess}
-                      className="w-full py-4 rounded-2xl bg-white text-black font-bold shadow-[0_0_20px_rgba(255,255,255,0.3)] hover:scale-[1.02] active:scale-95 transition-all"
-                    >
-                      Enable Sensors
-                    </button>
-                  </div>
-                </motion.div>
-              )}
-            </AnimatePresence>
-
-            {/* PWA Install Modal */}
+            {/* PWA Install Modal (Moved outside the support check so it can still appear) */}
             <AnimatePresence>
               {showPwaPrompt && (
                 <motion.div 
@@ -354,15 +403,71 @@ function App() {
               )}
             </AnimatePresence>
 
+            {!isSupported ? (
+              <div className="glass-panel p-8 max-w-sm w-full text-center space-y-6 relative border border-white/10 shadow-2xl flex flex-col items-center">
+                <div className="w-16 h-16 bg-red-500/10 rounded-full flex items-center justify-center shadow-inner">
+                  <AlertTriangle className="w-8 h-8 text-brand-secondary" />
+                </div>
+                <div>
+                  <h2 className="text-xl font-bold mb-3 text-white">Sensor Not Supported</h2>
+                  <p className="text-white/60 text-sm leading-relaxed">
+                    We are sorry, this device has limited sensor ability or missing axis support. Hence, the compass will not work on this device. Still, you can check other features using the dock below.
+                  </p>
+                </div>
+              </div>
+            ) : (
+              <>
+                {/* Sensor Permission Overlay */}
+            <AnimatePresence>
+              {(hasPermission === null || hasPermission === false) && (
+                <motion.div 
+                  initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+                  className="absolute inset-0 z-40 bg-black/80 backdrop-blur-xl flex items-center justify-center p-8"
+                >
+                  <div className="glass-panel p-10 max-w-sm w-full text-center space-y-8 relative overflow-hidden">
+                    <div className="absolute top-0 inset-x-0 h-1 bg-gradient-to-r from-brand-accent via-white to-brand-accent opacity-50" />
+                    <CompassIcon className="w-16 h-16 mx-auto text-brand-accent opacity-80" />
+                    <div className="space-y-2">
+                      <h2 className="text-2xl font-bold">Sensor Calibration</h2>
+                      <p className="text-white/60 text-sm">Drift requires access to your device's orientation sensors to provide a high-fidelity compass experience.</p>
+                    </div>
+                    <button 
+                      onClick={requestAccess}
+                      className="w-full py-4 rounded-2xl bg-white text-black font-bold shadow-[0_0_20px_rgba(255,255,255,0.3)] hover:scale-[1.02] active:scale-95 transition-all"
+                    >
+                      Enable Sensors
+                    </button>
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
+
+
+
             {/* Info Pill */}
             <div className="mb-12 px-5 py-2.5 bg-white/5 border border-white/10 rounded-full flex gap-6 text-xs font-mono font-medium tracking-wider text-white/70 shadow-lg backdrop-blur-md">
               <span>LAT: <span className="text-white">{location.lat ? location.lat.toFixed(4) : '---'}</span></span>
               <span>LON: <span className="text-white">{location.lng ? location.lng.toFixed(4) : '---'}</span></span>
             </div>
 
+            {/* Magnetic Interference Warning */}
+            <AnimatePresence>
+              {mag.isSupported && mag.total > 85 && (
+                <motion.div 
+                  initial={{ opacity: 0, y: -20, scale: 0.9 }}
+                  animate={{ opacity: 1, y: 0, scale: 1 }}
+                  exit={{ opacity: 0, y: -10, scale: 0.9 }}
+                  className="mb-6 px-4 py-2 bg-red-500/10 border border-red-500/30 rounded-full flex items-center gap-3 backdrop-blur-md shadow-[0_0_20px_rgba(255,0,0,0.2)]"
+                >
+                  <AlertTriangle className="w-4 h-4 text-red-500 animate-pulse" />
+                  <span className="text-[10px] font-bold text-red-400 uppercase tracking-widest">Magnetic Interference</span>
+                </motion.div>
+              )}
+            </AnimatePresence>
+
             {/* Compass Display */}
             <div className="flex flex-col items-center gap-10 w-full relative">
-              <CompassDial heading={heading} lockedHeading={lockedHeading} />
+              <CompassDial heading={heading} lockedHeading={lockedHeading} celestialData={celestial} waypointBearing={waypointBearing} />
 
               <div className="absolute top-1/2 -translate-y-1/2 flex flex-col items-center justify-center pointer-events-none z-10">
                 <motion.div 
@@ -370,27 +475,44 @@ function App() {
                   initial={{ opacity: 0, scale: 0.9 }}
                   animate={{ opacity: 1, scale: 1 }}
                 >
-                  <span>{Math.round(heading).toString().padStart(3, '0')}</span>
+                  <span>{(Math.round(normalizeAngle(heading)) % 360).toString().padStart(3, '0')}</span>
                   <span className="text-2xl mt-2 text-brand-accent ml-1">°</span>
                 </motion.div>
               </div>
 
-              {/* Direction Lock Button */}
-              <button 
-                onClick={() => setLockedHeading(lockedHeading === null ? heading : null)}
-                className={`
-                  mt-8 flex items-center gap-2 px-8 py-4 rounded-2xl border backdrop-blur-lg transition-all duration-300 shadow-xl
-                  ${lockedHeading !== null 
-                    ? 'bg-brand-secondary/20 border-brand-secondary text-white shadow-[0_0_30px_rgba(255,0,60,0.3)] scale-105' 
-                    : 'bg-white/5 border-white/10 text-white/80 hover:bg-white/10'}
-                `}
-              >
-                <Navigation className={`w-5 h-5 ${lockedHeading !== null ? 'fill-brand-secondary text-brand-secondary' : ''}`} />
-                <span className="text-sm font-semibold tracking-wide">
-                  {lockedHeading !== null ? 'TARGET LOCKED' : 'LOCK HEADING'}
-                </span>
-              </button>
+              <div className="mt-8 flex items-center gap-4">
+                {/* Direction Lock Button */}
+                <button 
+                  onClick={() => {
+                    initAudio();
+                    const newLocked = lockedHeading === null ? heading : null;
+                    setLockedHeading(newLocked);
+                    if (newLocked !== null) playLock();
+                  }}
+                  className={`
+                    flex items-center gap-2 px-8 py-4 rounded-2xl border backdrop-blur-lg transition-all duration-300 shadow-xl
+                    ${lockedHeading !== null 
+                      ? 'bg-brand-secondary/20 border-brand-secondary text-white shadow-[0_0_30px_rgba(255,0,60,0.3)] scale-105' 
+                      : 'bg-white/5 border-white/10 text-white/80 hover:bg-white/10'}
+                  `}
+                >
+                  <Navigation className={`w-5 h-5 ${lockedHeading !== null ? 'fill-brand-secondary text-brand-secondary' : ''}`} />
+                  <span className="text-sm font-semibold tracking-wide">
+                    {lockedHeading !== null ? 'TARGET LOCKED' : 'LOCK HEADING'}
+                  </span>
+                </button>
+
+                {/* Calibrate Button */}
+                <button
+                  onClick={() => setShowCalibration(true)}
+                  className="p-4 rounded-2xl border border-white/10 bg-white/5 hover:bg-white/10 backdrop-blur-lg shadow-xl text-white/60 hover:text-white transition-all active:scale-95"
+                >
+                  <RefreshCcw className="w-5 h-5" />
+                </button>
+              </div>
             </div>
+              </>
+            )}
           </div>
         )}
 
@@ -455,6 +577,16 @@ function App() {
                       <div className="font-mono text-brand-accent font-bold">{location.lng ? location.lng.toFixed(5) : 'Unknown'}</div>
                     </div>
                   </div>
+                  
+                  {/* Share Offline Broadcast */}
+                  <button 
+                    onClick={handleShareLocation}
+                    disabled={!location.lat}
+                    className="w-full py-3 mt-4 bg-brand-accent/10 hover:bg-brand-accent/20 border border-brand-accent/50 text-brand-accent rounded-xl flex items-center justify-center gap-2 active:scale-95 transition-all disabled:opacity-50 disabled:pointer-events-none"
+                  >
+                    <Share2 className="w-4 h-4" />
+                    <span className="text-xs font-bold uppercase tracking-widest">Share Last Position</span>
+                  </button>
                 </div>
               </div>
             ) : (
@@ -488,14 +620,88 @@ function App() {
                   
                   <div className="flex gap-4 justify-center pt-4">
                     <div className="glass-panel px-5 py-3 rounded-xl border border-white/10 flex flex-col items-center">
-                      <span className="text-[9px] uppercase tracking-widest text-white/40 mb-1">Velocity</span>
-                      <span className="text-sm font-mono text-brand-accent font-bold">{location.speed ? location.speed.toFixed(1) : '0.0'} <span className="text-[9px]">m/s</span></span>
-                    </div>
                     <div className="glass-panel px-5 py-3 rounded-xl border border-white/10 flex flex-col items-center">
                       <span className="text-[9px] uppercase tracking-widest text-white/40 mb-1">Altitude</span>
                       <span className="text-sm font-mono text-brand-accent font-bold">{location.altitude ? location.altitude.toFixed(0) : '---'} <span className="text-[9px]">m</span></span>
                     </div>
                   </div>
+
+                  <div className="mt-8 flex items-center justify-between">
+                    <div className="flex items-center gap-4">
+                      <div className="w-12 h-12 bg-white/10 rounded-full flex items-center justify-center">
+                        <MapPin className="w-6 h-6 text-white" />
+                      </div>
+                      <div>
+                        <div className="text-white/40 text-[10px] uppercase tracking-widest font-bold">Accuracy</div>
+                        <div className="font-mono text-xl text-white">±{location.accuracy.toFixed(0)}m</div>
+                      </div>
+                    </div>
+
+                    <button 
+                      onClick={handleShareLocation}
+                      disabled={!location.lat}
+                      className="px-6 py-3 rounded-full bg-white/10 hover:bg-white/20 border border-white/20 text-white transition-all active:scale-95 disabled:opacity-50 flex items-center gap-2"
+                    >
+                      <Share2 className="w-4 h-4" />
+                      <span className="text-xs font-bold uppercase tracking-widest">Share</span>
+                    </button>
+                  </div>
+                  
+                  {/* Waypoint Section */}
+                  <div className="mt-8 p-6 bg-brand-accent/5 border border-brand-accent/20 rounded-2xl">
+                    <div className="flex items-center justify-center gap-2 mb-4">
+                      <MapPin className="w-5 h-5 text-brand-accent" />
+                      <h3 className="font-bold uppercase tracking-widest text-brand-accent text-sm">Waypoint Tracking</h3>
+                    </div>
+                    
+                    {waypoint && waypointDistance !== null ? (
+                      <div className="space-y-4">
+                        <div className="grid grid-cols-2 gap-4">
+                          <div className="bg-white/5 p-4 rounded-xl border border-white/5">
+                            <div className="text-[10px] text-white/40 uppercase tracking-widest mb-1 font-bold">Distance</div>
+                            <div className="font-mono text-xl text-white">
+                              {waypointDistance > 1000 ? (waypointDistance / 1000).toFixed(2) + ' km' : waypointDistance.toFixed(0) + ' m'}
+                            </div>
+                          </div>
+                          <div className="bg-white/5 p-4 rounded-xl border border-white/5">
+                            <div className="text-[10px] text-white/40 uppercase tracking-widest mb-1 font-bold">Bearing</div>
+                            <div className="font-mono text-xl text-white">{waypointBearing?.toFixed(0)}°</div>
+                          </div>
+                        </div>
+                        <button 
+                          onClick={handleClearPin}
+                          className="w-full py-3 bg-red-500/10 hover:bg-red-500/20 border border-red-500/30 text-red-400 rounded-xl flex items-center justify-center gap-2 active:scale-95 transition-all text-xs font-bold uppercase tracking-widest"
+                        >
+                          <Trash2 className="w-4 h-4" /> Clear Waypoint
+                        </button>
+                      </div>
+                    ) : (
+                      <button 
+                        onClick={handleDropPin}
+                        disabled={!location.lat}
+                        className="w-full py-4 bg-brand-accent/20 hover:bg-brand-accent/30 border border-brand-accent/50 text-white rounded-xl flex items-center justify-center gap-2 active:scale-95 transition-all text-sm font-bold uppercase tracking-widest shadow-[0_0_20px_var(--color-brand-accent)] disabled:opacity-50"
+                      >
+                        <MapPin className="w-5 h-5 text-brand-accent" /> Drop Pin (Save Location)
+                      </button>
+                    )}
+                  </div>
+
+                  {/* Sky Navigation / Celestial Data */}
+                  {celestial && (
+                    <div className="glass-panel p-6 mt-6 flex justify-between items-center text-center">
+                      <div>
+                        <Sun className="w-5 h-5 mx-auto mb-2 text-yellow-400" />
+                        <div className="text-[10px] text-white/40 uppercase tracking-widest mb-1">Sunrise</div>
+                        <div className="font-mono text-white text-sm">{celestial.sunrise ? celestial.sunrise.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '--:--'}</div>
+                      </div>
+                      <div className="w-px h-10 bg-white/10" />
+                      <div>
+                        <Moon className="w-5 h-5 mx-auto mb-2 text-blue-300" />
+                        <div className="text-[10px] text-white/40 uppercase tracking-widest mb-1">Sunset</div>
+                        <div className="font-mono text-white text-sm">{celestial.sunset ? celestial.sunset.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '--:--'}</div>
+                      </div>
+                    </div>
+                  )}
                 </div>
 
                 {/* HUD Overlay */}
@@ -526,19 +732,34 @@ function App() {
               <p className="text-white/40 text-xs uppercase tracking-widest mt-1">Real-time Diagnostics</p>
             </div>
 
-            <div className="glass-panel p-6 space-y-4">
-              <div className="flex justify-between items-center">
-                <span className="text-white/60 text-sm font-medium">Magnetic Flux</span>
-                <span className="text-brand-accent font-mono text-xl">{mag.isSupported ? `${Math.round(mag.total)} µT` : 'N/A'}</span>
+            <div className="glass-panel p-6 space-y-4 relative overflow-hidden">
+              {/* Interference Background Glow */}
+              {mag.isSupported && mag.total > 85 && (
+                <div className="absolute inset-0 bg-red-500/10 animate-pulse pointer-events-none" />
+              )}
+              
+              <div className="flex justify-between items-end relative z-10">
+                <div>
+                  <span className="text-white/60 text-sm font-medium block mb-1">Magnetic Flux</span>
+                  {mag.isSupported && (
+                    <span className={`text-[9px] uppercase tracking-widest font-bold ${mag.total > 85 ? 'text-red-400' : mag.total > 60 ? 'text-yellow-400' : 'text-green-400'}`}>
+                      {mag.total > 85 ? 'Interference Detected' : mag.total > 60 ? 'Elevated Field' : 'Normal Field'}
+                    </span>
+                  )}
+                </div>
+                <span className={`font-mono text-2xl font-light ${mag.isSupported && mag.total > 85 ? 'text-red-400' : 'text-brand-accent'}`}>
+                  {mag.isSupported ? `${Math.round(mag.total)} µT` : 'N/A'}
+                </span>
               </div>
-              <div className="h-2 w-full bg-white/10 rounded-full overflow-hidden">
+              <div className="h-2 w-full bg-white/10 rounded-full overflow-hidden relative z-10">
                 <motion.div 
-                  className="h-full bg-brand-accent"
+                  className={`h-full ${mag.total > 85 ? 'bg-red-500 shadow-[0_0_10px_rgba(255,0,0,0.8)]' : mag.total > 60 ? 'bg-yellow-500' : 'bg-brand-accent'}`}
                   initial={{ width: 0 }}
-                  animate={{ width: `${mag.isSupported ? Math.min(mag.total, 100) : 0}%` }}
+                  animate={{ width: `${mag.isSupported ? Math.min((mag.total / 150) * 100, 100) : 0}%` }}
+                  transition={{ type: "spring", bounce: 0, duration: 0.5 }}
                 />
               </div>
-              <div className="grid grid-cols-3 gap-4 text-center">
+              <div className="grid grid-cols-3 gap-4 text-center relative z-10 mt-2">
                 <div className="bg-white/5 p-3 rounded-xl">
                   <div className="text-[10px] text-white/30 uppercase mb-1">X-Axis</div>
                   <div className="font-mono text-sm">{mag.isSupported ? mag.x.toFixed(1) : '-'}</div>
@@ -550,6 +771,54 @@ function App() {
                 <div className="bg-white/5 p-3 rounded-xl">
                   <div className="text-[10px] text-white/30 uppercase mb-1">Z-Axis</div>
                   <div className="font-mono text-sm">{mag.isSupported ? mag.z.toFixed(1) : '-'}</div>
+                </div>
+              </div>
+            </div>
+
+            {/* 3D Inclinometer / Bubble Level */}
+            <div className="glass-panel p-6 space-y-6">
+              <div className="flex justify-between items-center">
+                <span className="text-white/60 text-sm font-medium">Inclinometer</span>
+                <span className={`text-[10px] font-bold uppercase tracking-widest px-3 py-1 rounded-full ${Math.abs(orientation.beta) < 2 && Math.abs(orientation.gamma) < 2 ? 'bg-brand-accent/20 text-brand-accent' : 'bg-white/10 text-white/40'}`}>
+                  {Math.abs(orientation.beta) < 2 && Math.abs(orientation.gamma) < 2 ? 'Perfectly Level' : 'Tilted'}
+                </span>
+              </div>
+              
+              <div className="flex justify-center relative py-4">
+                <div className="w-40 h-40 rounded-full border border-white/10 bg-black/60 shadow-[inset_0_10px_30px_rgba(0,0,0,0.8)] relative flex items-center justify-center overflow-hidden">
+                  {/* Crosshairs */}
+                  <div className="absolute inset-x-0 h-px bg-white/10" />
+                  <div className="absolute inset-y-0 w-px bg-white/10" />
+                  
+                  {/* Center Target */}
+                  <div className="absolute w-8 h-8 rounded-full border-2 border-brand-accent/30 z-10" />
+                  <div className="absolute w-2 h-2 rounded-full bg-brand-accent/20 z-10" />
+
+                  {/* The Bubble */}
+                  <motion.div 
+                    className="absolute w-8 h-8 bg-brand-accent/80 backdrop-blur-md rounded-full shadow-[0_0_20px_var(--color-brand-accent)] border border-white/40"
+                    animate={{
+                      // Scale mapping: 90 degrees = edge of the 160px circle (80px radius).
+                      // Since bubble is 32px, max translation is ~64px.
+                      x: Math.max(-64, Math.min(64, orientation.gamma * 1.5)),
+                      y: Math.max(-64, Math.min(64, orientation.beta * 1.5))
+                    }}
+                    transition={{ type: "spring", stiffness: 150, damping: 15 }}
+                  />
+                  
+                  {/* Glass Reflection */}
+                  <div className="absolute top-2 left-4 right-4 h-12 bg-gradient-to-b from-white/10 to-transparent rounded-full pointer-events-none" />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4 text-center">
+                <div className="bg-white/5 p-4 rounded-xl border border-white/5">
+                  <div className="text-[10px] text-white/30 uppercase mb-1 font-bold tracking-widest">Pitch (β)</div>
+                  <div className="font-mono text-lg text-white/80">{orientation.isSupported ? orientation.beta.toFixed(1) : '-'}°</div>
+                </div>
+                <div className="bg-white/5 p-4 rounded-xl border border-white/5">
+                  <div className="text-[10px] text-white/30 uppercase mb-1 font-bold tracking-widest">Roll (γ)</div>
+                  <div className="font-mono text-lg text-white/80">{orientation.isSupported ? orientation.gamma.toFixed(1) : '-'}°</div>
                 </div>
               </div>
             </div>
@@ -569,9 +838,17 @@ function App() {
             </div>
             
             <div className="text-center p-4">
-              <p className="text-white/20 text-xs uppercase tracking-widest">
+              <p className="text-white/20 text-xs uppercase tracking-widest mb-4">
                 System Status: {(mag.isSupported && isSupported) ? 'Operational' : 'Limited Sensor Support'}
               </p>
+              {(mag.isSupported && isSupported) && (
+                <button 
+                  onClick={() => setShowCalibration(true)}
+                  className="px-6 py-2 rounded-full border border-white/10 bg-white/5 hover:bg-white/10 text-xs font-bold uppercase tracking-widest text-white/60 transition-all active:scale-95 flex items-center gap-2 mx-auto"
+                >
+                  <RefreshCcw className="w-4 h-4" /> Calibrate Sensors
+                </button>
+              )}
             </div>
           </motion.div>
         )}
@@ -649,12 +926,32 @@ function App() {
                     <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${hapticsEnabled ? 'translate-x-6' : 'translate-x-1'}`} />
                   </button>
                 </div>
+
+                {/* Sound */}
+                <div className="p-5 flex justify-between items-center">
+                  <div className="flex items-center gap-4">
+                    <div className={`p-2 rounded-xl ${soundEnabled ? 'bg-brand-secondary/20 text-brand-secondary' : 'bg-white/10 text-white/40'}`}>
+                      <Volume2 className="w-5 h-5" />
+                    </div>
+                    <div>
+                      <p className="font-semibold text-sm text-white">Sound Engine</p>
+                      <p className="text-xs text-white/50">{soundEnabled ? 'Synthesized Audio Active' : 'Muted'}</p>
+                    </div>
+                  </div>
+                  <button 
+                    onClick={toggleSound}
+                    className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${soundEnabled ? 'bg-brand-secondary' : 'bg-white/20'}`}
+                  >
+                    <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${soundEnabled ? 'translate-x-6' : 'translate-x-1'}`} />
+                  </button>
+                </div>
               </div>
             </div>
 
             <div className="space-y-2">
               <h3 className="text-brand-accent text-[10px] font-bold uppercase tracking-widest ml-2">App Status</h3>
               <div className="glass-panel overflow-hidden divide-y divide-white/10">
+                {/* Network State */}
                 <div className="p-5 flex justify-between items-center">
                   <div className="flex items-center gap-4">
                     <div className={`p-2 rounded-xl ${!isOffline ? 'bg-brand-accent/20 text-brand-accent' : 'bg-red-500/20 text-red-500'}`}>
@@ -665,6 +962,50 @@ function App() {
                       <p className="text-xs text-white/50">{!isOffline ? 'Online & Syncing' : 'Offline Mode Active'}</p>
                     </div>
                   </div>
+                </div>
+
+                {/* PWA State */}
+                <div className="p-5 flex flex-col gap-4">
+                  <div className="flex justify-between items-center">
+                    <div className="flex items-center gap-4">
+                      <div className={`p-2 rounded-xl ${isStandalone ? 'bg-brand-accent/20 text-brand-accent' : 'bg-white/10 text-white/40'}`}>
+                        <Smartphone className="w-5 h-5" />
+                      </div>
+                      <div>
+                        <p className="font-semibold text-sm text-white">App Installation</p>
+                        <p className="text-xs text-white/50">{isStandalone ? 'Installed as Native PWA' : 'Running in Browser'}</p>
+                      </div>
+                    </div>
+                    {isStandalone ? (
+                      <span className="text-[10px] font-bold uppercase tracking-widest text-brand-accent bg-brand-accent/10 px-3 py-1 rounded-full">Installed</span>
+                    ) : deferredPrompt ? (
+                      <button 
+                        onClick={handleInstallClick}
+                        className="text-[10px] font-bold uppercase tracking-widest text-black bg-white hover:bg-white/90 px-4 py-2 rounded-full shadow-[0_0_15px_rgba(255,255,255,0.4)] transition-all active:scale-95"
+                      >
+                        Install App
+                      </button>
+                    ) : null}
+                  </div>
+                </div>
+
+                {/* Hard Refresh */}
+                <div className="p-5 flex justify-between items-center bg-red-500/5">
+                  <div className="flex items-center gap-4">
+                    <div className="p-2 rounded-xl bg-red-500/20 text-red-500">
+                      <Activity className="w-5 h-5" />
+                    </div>
+                    <div>
+                      <p className="font-semibold text-sm text-red-400">Hard Refresh System</p>
+                      <p className="text-[10px] text-white/40 uppercase tracking-widest mt-1">Clear Cache & Reload</p>
+                    </div>
+                  </div>
+                  <button 
+                    onClick={handleHardRefresh}
+                    className="text-[10px] font-bold uppercase tracking-widest text-white border border-red-500/50 hover:bg-red-500/20 px-4 py-2 rounded-full transition-all active:scale-95"
+                  >
+                    Force Reload
+                  </button>
                 </div>
               </div>
             </div>
@@ -718,6 +1059,9 @@ function App() {
         <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-full h-full bg-[radial-gradient(circle_at_center,rgba(255,255,255,0.03)_0%,transparent_70%)]" />
         <div className="absolute inset-0 bg-[url('https://grainy-gradients.vercel.app/noise.svg')] opacity-[0.15] brightness-100" />
       </div>
+
+      {/* Global Calibration Overlay */}
+      <CalibrationModal isOpen={showCalibration} onClose={() => setShowCalibration(false)} />
     </div>
   );
 }

@@ -1,12 +1,16 @@
 import React from 'react';
 import { motion } from 'framer-motion';
+import { Sun, Moon } from 'lucide-react';
+import { CelestialData } from '../../hooks/useCelestial';
 
 interface CompassDialProps {
   heading: number;
   lockedHeading?: number | null;
+  celestialData?: CelestialData | null;
+  waypointBearing?: number | null;
 }
 
-const CompassDial: React.FC<CompassDialProps> = ({ heading, lockedHeading }) => {
+const CompassDial: React.FC<CompassDialProps> = ({ heading, lockedHeading, celestialData, waypointBearing }) => {
   const markings = Array.from({ length: 72 }, (_, i) => i * 5);
   
   return (
@@ -55,6 +59,29 @@ const CompassDial: React.FC<CompassDialProps> = ({ heading, lockedHeading }) => 
             )}
           </div>
         ))}
+
+        {/* Celestial Markers (Sky Navigation) */}
+        {celestialData && (
+          <>
+            <div
+              className="absolute inset-0 flex justify-center py-2 pointer-events-none z-20"
+              style={{ transform: `rotate(${celestialData.sunAzimuth}deg)` }}
+            >
+              <div className="absolute top-[2.5rem] flex flex-col items-center justify-center bg-black/40 rounded-full p-1 backdrop-blur-md border border-white/5">
+                <Sun className="w-3 h-3 text-yellow-400 drop-shadow-[0_0_10px_rgba(253,224,71,0.8)]" />
+              </div>
+            </div>
+            
+            <div
+              className="absolute inset-0 flex justify-center py-2 pointer-events-none z-20"
+              style={{ transform: `rotate(${celestialData.moonAzimuth}deg)` }}
+            >
+              <div className="absolute top-[2.5rem] flex flex-col items-center justify-center bg-black/40 rounded-full p-1 backdrop-blur-md border border-white/5">
+                <Moon className="w-3 h-3 text-blue-300 drop-shadow-[0_0_10px_rgba(147,197,253,0.8)]" />
+              </div>
+            </div>
+          </>
+        )}
       </motion.div>
 
       {/* Center Pivot & Decorative Hub */}
@@ -88,6 +115,21 @@ const CompassDial: React.FC<CompassDialProps> = ({ heading, lockedHeading }) => 
             <div className="w-1.5 h-1.5 bg-brand-secondary rounded-full" />
           </div>
         </motion.div>
+      )}
+
+      {/* Waypoint Marker */}
+      {waypointBearing !== null && waypointBearing !== undefined && (
+        <div
+          className="absolute inset-0 flex justify-center py-2 pointer-events-none z-30"
+          style={{ transform: `rotate(${waypointBearing}deg)` }}
+        >
+          <div className="absolute top-4 flex flex-col items-center justify-center bg-brand-accent/20 rounded-full p-1.5 backdrop-blur-md border border-brand-accent shadow-[0_0_15px_var(--color-brand-accent)]">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className="text-brand-accent">
+              <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path>
+              <circle cx="12" cy="10" r="3"></circle>
+            </svg>
+          </div>
+        </div>
       )}
       
       {/* Premium Glass Highlights */}
